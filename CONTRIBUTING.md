@@ -19,21 +19,20 @@ Optional:
 
 ## Workflow
 
-Never push straight to `main`. Use a branch and a pull request:
+We both push directly to `main`, and **every push to `main` deploys to the live site**, so only push code that passes:
 
 ```bash
-git switch main && git pull               # start from the latest main
-git switch -c feat/short-description      # one branch per change
+git pull --rebase                         # get the other person's latest work first
 # ...edit...
 pnpm check                                # typecheck + tests must pass
 git add -A && git commit -m "Add X"
-git push -u origin feat/short-description
+git pull --rebase && git push             # if the push is rejected, pull --rebase again
 ```
 
-Then open a pull request on GitHub. CI runs automatically. The other person reviews and merges it.
+CI runs on every push; if the badge turns red, fix it straight away. For bigger or risky changes, use a branch (`git switch -c feat/x`) and open a pull request so the other person can review first. Force-pushing and deleting `main` are blocked.
 
 Rules of thumb:
-- Keep PRs small, with one feature or fix each.
+- Keep commits and PRs small, with one feature or fix each.
 - Add or adjust tests with every behaviour change.
 - Using an AI assistant? It should read `AGENTS.md` (Claude Code, Cursor, Codex and Copilot pick it up automatically).
 - Game rules belong in `packages/engine` (pure and tested), not in the server or UI.
