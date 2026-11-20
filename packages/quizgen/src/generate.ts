@@ -1,8 +1,9 @@
-import { QuestionSchema, type GenerationEvent, type Question, type QuestionInput } from "@notebattle/protocol";
+import { QuestionSchema, type GenerationEvent, type QualityFlag, type Question, type QuestionInput } from "@notebattle/protocol";
 import { chunkPages, extractPages, type Chunk } from "./extract.js";
 import { parseJsonObject, type ChatClient } from "./llm.js";
 import { offlineQuestions } from "./offline.js";
 import { checkQuestion, isDuplicatePrompt } from "./quality.js";
+import { resolveAnswers } from "./verify.js";
 
 export interface GenerateOptions {
   /** Target number of questions to keep. */
@@ -10,7 +11,11 @@ export interface GenerateOptions {
   /** null => offline generator. */
   llm: ChatClient | null;
   title?: string;
+  /** Uploaded file name; a better default title than any single heading. */
+  filename?: string;
   concurrency?: number;
+  /** Re-solve each LLM question without its key (one extra call per section). Default true. */
+  verify?: boolean;
   signal?: AbortSignal;
 }
 
@@ -79,6 +84,53 @@ export function pickChunks(chunks: Chunk[], n: number): Chunk[] {
   return Array.from({ length: n }, (_, i) => chunks[Math.floor(i * step)]!);
 }
 
+type Outcome = { ok: true; q: Question; flags: QualityFlag[] } | { ok: false; reason: string; prompt: string };
+
+/** Schema + deterministic checks (no I/O). */
+function gate(input: QuestionInput, chunk: Chunk): Outcome {
+  const parsed = QuestionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, reason: "malformed question", prompt: String(input.prompt ?? "").slice(0, 120) };
+  const q = parsed.data;
+  const verdict = checkQuestion(q, chunk.text);
+  if (!verdict.ok) return { ok: false, reason: verdict.reason, prompt: q.prompt };
+  return { ok: true, q, flags: verdict.flags };
+}
+
+/** One section: generate, run the free deterministic gate, then re-solve only the survivors. */
+async function generateForChunk(llm: ChatClient, chunk: Chunk, k: number, verify: boolean): Promise<Outcome[]> {
+  const res = await llm.chat(
+    [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: userPrompt(chunk, k) },
+    ],
+    { json: true },
+  );
+  const obj = parseJsonObject(res.content) as { questions?: unknown };
+  const raw = Array.isArray(obj.questions) ? obj.questions : [];
+  const outcomes = raw.map((item, n): Outcome => {
+    const input = coerceRaw(item, chunk, n);
+    return input ? gate(input, chunk) : { ok: false, reason: "malformed question", prompt: "" };
+  });
+  if (!verify) return outcomes;
+  const survivors = outcomes.filter((o): o is Extract<Outcome, { ok: true }> => o.ok);
+  let solved: Array<number | null>;
+  try {
+    solved = await resolveAnswers(llm, survivors.map((o) => o.q));
+  } catch {
+    // Verifier unavailable: keep the questions but tell the host they were not re-solved.
+    for (const o of survivors) o.flags.push("unverified");
+    return outcomes;
+  }
+  const verdicts = new Map(survivors.map((o, i) => [o, solved[i]]));
+  return outcomes.map((o) => {
+    if (!o.ok) return o;
+    const got = verdicts.get(o);
+    if (got === null) return { ok: false, reason: "evidence doesn't settle the answer", prompt: o.q.prompt };
+    if (got !== o.q.answer) return { ok: false, reason: "independent re-solve disagreed with the answer key", prompt: o.q.prompt };
+    return o;
+  });
+}
+
 export async function* generateDeck(bytes: Uint8Array, opts: GenerateOptions): AsyncGenerator<GenerationEvent> {
   const started = Date.now();
   const target = Math.min(Math.max(opts.count ?? 10, 1), MAX_QUESTIONS);
@@ -92,33 +144,27 @@ export async function* generateDeck(bytes: Uint8Array, opts: GenerateOptions): A
 
   const kept: Question[] = [];
   let rejected = 0;
-  const consider = function* (input: QuestionInput, chunk: Chunk): Generator<GenerationEvent> {
-    const parsed = QuestionSchema.safeParse(input);
-    if (!parsed.success) {
+  /** Final gate shared by both generators: dedupe + target, then emit. */
+  const accept = function* (o: Outcome): Generator<GenerationEvent> {
+    if (!o.ok) {
       rejected++;
-      yield { type: "rejected", reason: "malformed question", prompt: String(input.prompt ?? "").slice(0, 120) };
+      yield { type: "rejected", reason: o.reason, prompt: o.prompt };
       return;
     }
-    const q = parsed.data;
-    const verdict = checkQuestion(q, chunk.text);
-    if (!verdict.ok) {
+    if (isDuplicatePrompt(o.q.prompt, kept)) {
       rejected++;
-      yield { type: "rejected", reason: verdict.reason, prompt: q.prompt };
-      return;
-    }
-    if (isDuplicatePrompt(q.prompt, kept)) {
-      rejected++;
-      yield { type: "rejected", reason: "duplicate of another question", prompt: q.prompt };
+      yield { type: "rejected", reason: "duplicate of another question", prompt: o.q.prompt };
       return;
     }
     if (kept.length >= target) return;
-    kept.push(q);
-    yield { type: "question", question: q, flags: verdict.flags };
+    kept.push(o.q);
+    yield { type: "question", question: o.q, flags: o.flags };
   };
 
   let mode: "llm" | "offline" = opts.llm ? "llm" : "offline";
   if (opts.llm) {
-    // Over-ask by ~50%: the gate rejects some, and extra coverage is cheap.
+    const llm = opts.llm;
+    // Over-ask by ~50%: the gates reject some, and extra coverage is cheap.
     const used = pickChunks(chunks, Math.min(chunks.length, Math.ceil(target / 2)));
     const perChunk = Math.min(5, Math.ceil((target * 1.5) / used.length));
     const conc = opts.concurrency ?? 3;
@@ -127,30 +173,14 @@ export async function* generateDeck(bytes: Uint8Array, opts: GenerateOptions): A
     for (let i = 0; i < used.length && kept.length < target; i += conc) {
       if (opts.signal?.aborted) return;
       const batch = used.slice(i, i + conc);
-      const results = await Promise.allSettled(
-        batch.map(async (chunk) => {
-          const res = await opts.llm!.chat(
-            [
-              { role: "system", content: SYSTEM },
-              { role: "user", content: userPrompt(chunk, perChunk) },
-            ],
-            { json: true },
-          );
-          const obj = parseJsonObject(res.content) as { questions?: unknown };
-          return { chunk, items: Array.isArray(obj.questions) ? obj.questions : [] };
-        }),
-      );
+      const results = await Promise.allSettled(batch.map((chunk) => generateForChunk(llm, chunk, perChunk, opts.verify ?? true)));
       for (const r of results) {
         done++;
         if (r.status === "rejected") {
           failures++;
           continue;
         }
-        for (const [n, raw] of r.value.items.entries()) {
-          const input = coerceRaw(raw, r.value.chunk, n);
-          if (input) yield* consider(input, r.value.chunk);
-          else rejected++;
-        }
+        for (const o of r.value) yield* accept(o);
       }
       yield { type: "progress", done, total: used.length };
     }
@@ -161,7 +191,7 @@ export async function* generateDeck(bytes: Uint8Array, opts: GenerateOptions): A
   if (kept.length < target && (mode === "offline" || !opts.llm)) {
     for (const { question, chunk } of offlineQuestions(chunks, target * 2)) {
       if (kept.length >= target) break;
-      yield* consider(question, chunk);
+      yield* accept(gate(question, chunk));
     }
     yield { type: "progress", done: 1, total: 1 };
   }
@@ -170,10 +200,15 @@ export async function* generateDeck(bytes: Uint8Array, opts: GenerateOptions): A
     yield { type: "error", message: "Could not make any questions that pass the quality checks from this file" };
     return;
   }
-  yield { type: "done", title: opts.title ?? guessTitle(chunks), kept: kept.length, rejected, mode, ms: Date.now() - started };
+  yield { type: "done", title: opts.title ?? guessTitle(chunks, opts.filename), kept: kept.length, rejected, mode, ms: Date.now() - started };
 }
 
-function guessTitle(chunks: Chunk[]): string {
+export function guessTitle(chunks: Chunk[], filename?: string): string {
+  const stem = filename
+    ?.replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (stem && /[a-z]/i.test(stem)) return (stem[0]!.toUpperCase() + stem.slice(1)).slice(0, 80);
   const h = chunks.find((c) => c.heading !== "General")?.heading;
   return (h ?? "My notes").slice(0, 80);
 }

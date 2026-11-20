@@ -87,6 +87,7 @@ function baseView(s: GameState, now: number): RoomView {
     answeredCount: open ? s.players.filter((p) => p.answers[s.index]).length : 0,
     me: null,
     topics: s.phase === "finished" ? topicStats(s) : null,
+    resultsId: null,
     serverNow: now,
   };
 }

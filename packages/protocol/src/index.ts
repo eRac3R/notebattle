@@ -111,7 +111,19 @@ export interface RoomView {
   me: (MyResult & { id: string; name: string; score: number }) | null;
   /** Present once finished: which topics the room struggled with. */
   topics: TopicStat[] | null;
+  /** Id of the saved results page, once the finished game has been persisted. */
+  resultsId: string | null;
   serverNow: number;
+}
+
+export interface GameResults {
+  id: string;
+  code: string;
+  title: string;
+  finishedAt: string;
+  questionCount: number;
+  players: Array<{ name: string; score: number; rank: number; correct: number; bestStreak: number }>;
+  topics: TopicStat[];
 }
 
 /* ---------------- Socket.IO event maps ---------------- */
@@ -164,4 +176,5 @@ export type QualityFlag =
   | "answer-longest"
   | "short-evidence"
   | "similar-choices"
-  | "negative-prompt";
+  | "negative-prompt"
+  | "unverified";

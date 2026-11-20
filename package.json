@@ -9,9 +9,14 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "check": "turbo run typecheck test"
+    "check": "turbo run typecheck test",
+    "demo": "turbo run dev",
+    "e2e": "playwright test",
+    "db:up": "docker compose up -d --wait",
+    "db:migrate": "pnpm --filter @notebattle/server db:migrate"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/node": "^26.6.6",
     "turbo": "^2.11.13",
     "typescript": "^7.0.2",

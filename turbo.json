@@ -1,7 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": ["TEST_DATABASE_URL", "NOTEBATTLE_SKIP_DOTENV", "NOTEBATTLE_LLM_*", "DATABASE_URL", "DATABASE_URL_UNPOOLED", "PORT", "WEB_ORIGIN"],
   "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
+    "build": {
+      "dependsOn": ["^build"],
+      "env": ["NEXT_PUBLIC_SERVER_URL"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
     "typecheck": {},
     "test": {},
     "lint": {},

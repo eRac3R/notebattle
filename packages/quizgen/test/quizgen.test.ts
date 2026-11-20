@@ -14,6 +14,7 @@ import {
   offlineQuestions,
   parseJsonObject,
   type ChatClient,
+  type ChatMessage,
 } from "../src/index.js";
 
 const notes = readFileSync(new URL("../../../samples/os-notes.md", import.meta.url), "utf8");
@@ -131,14 +132,24 @@ describe("offline generator", () => {
   });
 });
 
+/** Fake provider: answers generation calls with `gen`, re-solve calls with `solve`. */
 class FakeLLM implements ChatClient {
   readonly label = "fake";
-  calls = 0;
-  constructor(private readonly reply: (n: number) => string) {}
-  async chat() {
-    return { content: this.reply(this.calls++), promptTokens: 1, completionTokens: 1, ms: 1 };
+  calls = { gen: 0, solve: 0 };
+  constructor(
+    private readonly gen: () => string,
+    private readonly solve: (userPrompt: string) => string = (u) => JSON.stringify({ answers: keysIn(u) }),
+  ) {}
+  async chat(messages: ChatMessage[]) {
+    const isSolve = messages[0]!.content.startsWith("You check quiz questions");
+    const content = isSolve ? (this.calls.solve++, this.solve(messages[1]!.content)) : (this.calls.gen++, this.gen());
+    return { content, promptTokens: 1, completionTokens: 1, ms: 1 };
   }
 }
+
+/** An honest solver for the fixture below: answers with each question's true key. */
+const TRUE_KEYS: Record<string, string> = { starve: "B", inode: "B" };
+const keysIn = (u: string) => u.split(/\n\nQ\d+\. /).map((b) => (/starve/.test(b) ? TRUE_KEYS.starve : TRUE_KEYS.inode));
 
 describe("LLM pipeline", () => {
   const reply = JSON.stringify({
@@ -177,6 +188,29 @@ describe("LLM pipeline", () => {
     expect(kept[0]).toMatchObject({ question: { answer: 1, choices: ["FCFS", "Shortest Job First", "Round Robin", "Aging"] } });
     expect(rejected).toContain("evidence quote not found in your notes");
     expect(events.at(-1)).toMatchObject({ type: "done", mode: "llm", kept: 1 });
+  });
+
+  it("rejects a question whose answer key the independent re-solve disagrees with", async () => {
+    const llm = new FakeLLM(
+      () => reply,
+      (u) => JSON.stringify({ answers: keysIn(u).map(() => "C") }), // solver picks C; keys say B
+    );
+    const events = await collect(generateDeck(bytes(notes), { llm, count: 3, concurrency: 1 }));
+    expect(events.filter((e) => e.type === "question")).toHaveLength(0);
+    expect(events.some((e) => e.type === "rejected" && e.reason === "independent re-solve disagreed with the answer key")).toBe(true);
+  });
+
+  it("keeps questions but flags them 'unverified' when the verifier reply is unusable", async () => {
+    const llm = new FakeLLM(() => reply, () => "no json here");
+    const events = await collect(generateDeck(bytes(notes), { llm, count: 1, concurrency: 1 }));
+    const q = events.find((e) => e.type === "question");
+    expect(q && q.type === "question" && q.flags).toContain("unverified");
+  });
+
+  it("can skip the re-solve to save calls", async () => {
+    const llm = new FakeLLM(() => reply);
+    await collect(generateDeck(bytes(notes), { llm, count: 1, concurrency: 1, verify: false }));
+    expect(llm.calls.solve).toBe(0);
   });
 
   it("falls back to the offline generator when every LLM call fails", async () => {

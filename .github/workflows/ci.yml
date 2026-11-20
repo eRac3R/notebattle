@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: notebattle
+          POSTGRES_PASSWORD: notebattle
+          POSTGRES_DB: notebattle
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U notebattle" --health-interval 2s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://notebattle:notebattle@localhost:5432/notebattle
+      NOTEBATTLE_SKIP_DOTENV: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit + integration tests (incl. real Postgres)
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: End-to-end battle (host + 3 phones, offline mode)
+        run: pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
