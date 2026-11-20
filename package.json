@@ -1,0 +1,20 @@
+{
+  "name": "notebattle",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "check": "turbo run typecheck test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "turbo": "^2.11.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}

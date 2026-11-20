@@ -1,0 +1,20 @@
+{
+  "name": "@notebattle/quizgen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@notebattle/protocol": "workspace:*",
+    "unpdf": "^2.2.1"
+  },
+  "devDependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}
