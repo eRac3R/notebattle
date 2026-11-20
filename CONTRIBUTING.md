@@ -35,5 +35,6 @@ Then open a pull request on GitHub. CI runs automatically. The other person revi
 Rules of thumb:
 - Keep PRs small, with one feature or fix each.
 - Add or adjust tests with every behaviour change.
+- Using an AI assistant? It should read `AGENTS.md` (Claude Code, Cursor, Codex and Copilot pick it up automatically).
 - Game rules belong in `packages/engine` (pure and tested), not in the server or UI.
 - If you change the wire contract, change `packages/protocol` first; TypeScript will then show every place that needs updating.
