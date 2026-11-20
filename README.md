@@ -1,5 +1,7 @@
 # NoteBattle
 
+[![CI](https://github.com/eRac3R/notebattle/actions/workflows/ci.yml/badge.svg)](https://github.com/eRac3R/notebattle/actions/workflows/ci.yml)
+
 **Turn your notes into a live multiplayer quiz battle, where every question carries a receipt.**
 
 Upload a PDF of what you're studying (semester notes, GATE material, slides). NoteBattle writes multiple-choice questions from it, your friends join from their phones with a 6-letter code, and you battle with a live timer, streaks and a scoreboard. After every question, the projector shows the exact line of *your* notes that proves the answer. After the game, it tells the room which topics to revise first.
