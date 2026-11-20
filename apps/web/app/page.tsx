@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Button, CHOICE_STYLES, Logo, Panel } from "@/components/game";
+import { ServerStatus } from "@/components/ServerStatus";
 
 const STEPS = [
   { title: "Drop your notes", body: "A PDF or text file: semester notes, GATE material, slides exported to PDF." },
@@ -20,9 +21,14 @@ export default function Home() {
     <main className="mx-auto flex max-w-6xl flex-col gap-16 px-4 py-8 sm:px-8">
       <nav className="flex items-center justify-between">
         <Logo />
-        <a href="https://github.com/eRac3R/notebattle" className="text-sm font-semibold text-muted hover:text-fg">
-          GitHub
-        </a>
+        <div className="flex items-center gap-5">
+          <span className="hidden sm:inline-flex">
+            <ServerStatus />
+          </span>
+          <a href="https://github.com/eRac3R/notebattle" className="text-sm font-semibold text-muted hover:text-fg">
+            GitHub
+          </a>
+        </div>
       </nav>
 
       <section className="grid items-center gap-12 lg:grid-cols-[1.2fr_1fr]">

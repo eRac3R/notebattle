@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { DeckSchema, type GenerationEvent, type QualityFlag, type Question } from "@notebattle/protocol";
 import { Button, CHOICE_STYLES, Logo, Panel, Spinner } from "@/components/game";
+import { ServerStatus } from "@/components/ServerStatus";
 import { SERVER_URL } from "@/lib/config";
 import { request } from "@/lib/socket";
 import { saveHostKey } from "@/lib/storage";
@@ -129,7 +130,10 @@ export default function CreatePage() {
 
       {stage === "upload" && (
         <section className="flex flex-col gap-6">
-          <h1 className="text-4xl font-extrabold tracking-tight">What are we studying?</h1>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h1 className="text-4xl font-extrabold tracking-tight">What are we studying?</h1>
+            <ServerStatus />
+          </div>
           <div
             onDragOver={(e) => {
               e.preventDefault();

@@ -1,5 +1,6 @@
 import { llmFromEnv } from "@notebattle/quizgen";
 import { buildApp } from "./app.js";
+import { runMigrations } from "./db/migrations.js";
 import { repoFromEnv } from "./db/repo.js";
 import { loadDotenv } from "./env.js";
 
@@ -13,6 +14,10 @@ const webOrigins: string[] | true = process.env.WEB_ORIGIN
   : dev
     ? true
     : ["http://localhost:3000"];
+
+// Free hosts have no pre-deploy hook, so migrate on boot (idempotent; a no-op when up to date).
+const migrateUrl = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+if (migrateUrl) await runMigrations(migrateUrl);
 
 const app = await buildApp({
   repo: repoFromEnv(),

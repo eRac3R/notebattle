@@ -1,0 +1,34 @@
+# Render Blueprint for the game server (free plan: no card; sleeps after 15 min idle, ~1 min wake).
+# Dashboard -> New -> Blueprint -> pick this repo. Values marked `sync: false` are asked for once
+# and stored as Render secrets; they are never committed.
+services:
+  - type: web
+    name: notebattle-server
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @notebattle/server build
+    startCommand: node apps/server/dist/main.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      # The Vercel URL of the web app (CORS + Socket.IO allow-list), e.g. https://notebattle.vercel.app
+      - key: WEB_ORIGIN
+        sync: false
+      # Neon: pooled URL for queries, direct (unpooled) URL for migrations at boot.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      # Any OpenAI-compatible provider; Groq free tier by default.
+      - key: NOTEBATTLE_LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: NOTEBATTLE_LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: NOTEBATTLE_LLM_API_KEY
+        sync: false
