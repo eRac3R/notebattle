@@ -3,7 +3,9 @@ import { expect, test, devices, type Page } from "@playwright/test";
 /** Waits for enter animations to settle so README screenshots aren't mid-fade. */
 const shot = async (page: Page, name: string) => {
   await page.waitForTimeout(900);
-  await page.screenshot({ path: `docs/screens/${name}.png` });
+  // Live runs keep their screenshots out of the README gallery.
+  const dir = process.env.E2E_BASE_URL ? "test-results/live-screens" : "docs/screens";
+  await page.screenshot({ path: `${dir}/${name}.png` });
 };
 
 test("host generates a deck from notes and three phones battle to the end", async ({ browser }) => {
@@ -14,9 +16,11 @@ test("host generates a deck from notes and three phones battle to the end", asyn
   await shot(host, "01-landing");
   await host.getByRole("button", { name: /Create from my notes/ }).click();
   await host.getByRole("button", { name: "5", exact: true }).click();
+  await expect(host.getByText("Game server online")).toBeVisible({ timeout: 120_000 });
   await host.getByRole("button", { name: /Try sample OS notes/ }).click();
   await expect(host.getByText("Quality gate")).toBeVisible();
-  await expect(host.getByRole("heading", { name: "Review before you battle" })).toBeVisible({ timeout: 30_000 });
+  // Live: the free server may need ~1 min to wake, and real LLM generation takes longer.
+  await expect(host.getByRole("heading", { name: "Review before you battle" })).toBeVisible({ timeout: 150_000 });
   await shot(host, "02-review");
   await host.getByRole("button", { name: /Open room with 5 questions/ }).click();
   await host.waitForURL(/\/host\/[A-Z0-9]{6}$/);

@@ -3,15 +3,20 @@ import { defineConfig, devices } from "@playwright/test";
 const SERVER_PORT = 4100;
 const WEB_PORT = 3100;
 
-/** Full stack, $0: game server in offline mode (no LLM, in-memory DB) + Next.js. */
+/**
+ * Default: full stack locally, $0 (game server in offline mode, in-memory DB, + Next.js).
+ * E2E_BASE_URL=https://notebattle.vercel.app runs the same battle against a live deployment.
+ */
+const live = process.env.E2E_BASE_URL;
+
 export default defineConfig({
   testDir: "e2e",
-  timeout: 120_000,
+  timeout: 360_000,
   fullyParallel: false,
   reporter: [["list"]],
-  use: { baseURL: `http://localhost:${WEB_PORT}`, trace: "retain-on-failure" },
+  use: { baseURL: live ?? `http://localhost:${WEB_PORT}`, trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: [
+  webServer: live ? [] : [
     {
       command: "pnpm --filter @notebattle/server exec tsx src/main.ts",
       url: `http://localhost:${SERVER_PORT}/healthz`,

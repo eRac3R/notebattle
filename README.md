@@ -6,7 +6,7 @@
 
 Upload a PDF of what you're studying (semester notes, GATE material, slides). NoteBattle writes multiple-choice questions from it, your friends join from their phones with a 6-letter code, and you battle with a live timer, streaks and a scoreboard. After every question, the projector shows the exact line of *your* notes that proves the answer. After the game, it tells the room which topics to revise first.
 
-> Live demo: _coming soon (deploying to Vercel + Render)_ · [Screenshots](#screenshots) · [Architecture](#architecture)
+> **Live: https://notebattle.vercel.app** (free hosting: the game server sleeps when idle, so the first visit can take up to a minute to wake it; the page shows its status) · [Screenshots](#screenshots) · [Architecture](#architecture)
 
 ![Reveal screen with the source receipt](docs/screens/06-reveal-with-receipt.png)
 
@@ -107,6 +107,7 @@ Try the generator on any file from the terminal:
 ```bash
 pnpm check   # typecheck + 51 unit/integration tests
 pnpm e2e     # Playwright: host + 3 phones play a full game in real browsers (~40 s)
+E2E_BASE_URL=https://notebattle.vercel.app pnpm e2e   # same battle against production
 ```
 
 | Suite | Covers |
@@ -135,6 +136,17 @@ CI (GitHub Actions) runs all of it on every push, with a Postgres service contai
 - The re-solve doubles LLM calls. On Groq's free tier, 10 questions took ~5 s without it and ~26 s with it (most likely free-tier rate limiting; not profiled yet). It can be turned off (`verify: false`).
 - Live rooms live in one process's memory, and free hosts sleep when idle (first request after a nap is slow).
 - No accounts yet, so there's no personal history across games (results pages are shareable by link).
+
+## Deployment
+
+| Piece | Where | Notes |
+|---|---|---|
+| Web app | Vercel Hobby, root `apps/web` | auto-deploys on push to `main`; env `NEXT_PUBLIC_SERVER_URL` |
+| Game server | Render free web service, Singapore ([`render.yaml`](render.yaml) Blueprint) | WebSockets supported; sleeps after 15 min idle, ~1 min wake; migrations run on boot |
+| Database | Neon Postgres, Singapore | pooled URL for queries, direct URL for migrations |
+| LLM | Groq free tier, `openai/gpt-oss-120b` | swap via `NOTEBATTLE_LLM_*` env vars |
+
+All secrets live in the hosts' environment settings, never in the repo.
 
 ## Cost
 
